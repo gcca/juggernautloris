@@ -1,0 +1,12 @@
+# Build goloris (slowloris for nginx) via the Go toolchain.
+go = go
+builddir = build
+
+rule gobuild
+  command = $go build -o $out $in
+  description = GO BUILD $out
+
+# Output into $builddir so the binary name doesn't collide with the goloris/ source dir.
+build $builddir/goloris: gobuild goloris/goloris.go
+
+default $builddir/goloris

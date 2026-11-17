@@ -1,0 +1,89 @@
+#!/usr/bin/env fish
+
+set -g prefix sclus
+set -g count 10
+
+set -l script_dir (dirname (status --current-filename))
+set -g self (realpath (status --current-filename))
+set -g root (realpath $script_dir/..)
+set -g echo_src $root/lor/pyloris.py
+set -g echo_dest /root/pyloris.py
+
+set -gx NO_COLOR 1
+
+function usage
+    echo "usage: sclus <setup|start URL|stop|destroy>" >&2
+    exit 2
+end
+
+function names
+    for i in (seq 0 (math $count - 1))
+        echo $prefix-$i
+    end
+end
+
+function live_names
+    $plexer --json list --prefix $prefix | jq -r '.$plexers[].name'
+end
+
+function setup_one
+    $plexer create --skip-console $argv[1]
+    and $plexer file push -s $argv[1] $echo_src $echo_dest
+end
+
+function start_one
+    echo "$argv[1]: sending exec -> run $echo_dest $argv[2]"
+    $plexer exec -s $argv[1] --no-stdin -- python $echo_dest $argv[2] >/dev/null 2>&1
+end
+
+function stop_one
+    for id in ($plexer sessions list -s $argv[1] | awk 'NR>1 {print $1}')
+        $plexer sessions kill -s $argv[1] $id
+    end
+end
+
+function destroy_one
+    $plexer destroy --force $argv[1]
+end
+
+switch $argv[1]
+    case _setup
+        setup_one $argv[2]
+        exit $status
+    case _start
+        start_one $argv[2] $argv[3]
+        exit $status
+    case _stop
+        stop_one $argv[2]
+        exit $status
+    case _destroy
+        destroy_one $argv[2]
+        exit $status
+end
+
+switch $argv[1]
+    case setup
+        for name in (names)
+            fish $self _setup $name </dev/null | cat &
+        end
+        wait
+    case start
+        set -l url $argv[2]
+        test -z "$url"; and usage
+        for name in (names)
+            fish $self _start $name $url </dev/null | cat &
+        end
+        wait
+    case stop
+        for name in (live_names)
+            fish $self _stop $name </dev/null | cat &
+        end
+        wait
+    case destroy
+        for name in (live_names)
+            fish $self _destroy $name </dev/null | cat &
+        end
+        wait
+    case '*'
+        usage
+end
